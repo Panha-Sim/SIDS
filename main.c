@@ -3,31 +3,33 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <time.h>
+#include <sys/time.h>
+
+#define DURATION 1000
 
 int fd;						// Memory Map I/O Driver
 volatile int *I2C0_ptr;    	// virtual address pointer to I2C0	
 volatile int *SYSMGR_ptr;   // virtual address pointer to SYSMGR	
+int16_t XYZ[3];
+int xyz[3];
+int16_t mg_per_lsb = 4;
+
 
 double findPeakGroundAcceleration(int *xyz);
 void openPhysical();
+long getCurrTime();
 
 int main(void){
 
     uint8_t devid;
-    int16_t mg_per_lsb = 4;
-    int16_t XYZ[3];
-    int xyz[3];
 	
 	// Open Memory Map I/O driver and map virtual address for I2C0 and SYSMGR
     openPhysical();
 	
-    // Configure Pin Muxing
+    // Configure I2C0 pins and enable I2C0 
     Pinmux_Config();
-    
-    // Initialize I2C0 Controller
     I2C0_Init();
-    
-    // 0xE5 is read from DEVID(0x00) if I2C is functioning correctly
     ADXL345_REG_READ(0x00, &devid);
     
     // Correct Device ID
@@ -35,20 +37,17 @@ int main(void){
     {
         // Initialize accelerometer chip
         ADXL345_Init();
-        
+
+        // 
+        long previousTime = getCurrTime();
         while(1)
         {
-			if (ADXL345_WasActivityUpdated())
-			{
-                ADXL345_XYZ_Read(XYZ);
-                printf("X=%d mg, Y=%d mg, Z=%d mg\n", XYZ[0]*mg_per_lsb, XYZ[1]*mg_per_lsb, XYZ[2]*mg_per_lsb);
-                
-                xyz[0] = XYZ[0]*mg_per_lsb;
-                xyz[1] = XYZ[1]*mg_per_lsb;
-                xyz[2] = XYZ[2]*mg_per_lsb;
-                
+            // Wait 2 second before displaying
+            if(getCurrTime() - previousTime > DURATION) 
+            {
+                readAcceleration();
                 printf("PGA=%f m/s^2\n", findPeakGroundAcceleration(&xyz[0]));
-
+                previousTime = getCurrTime();
             }
         }
     } 
@@ -73,7 +72,7 @@ void openPhysical(){
 
 //Find the Peak Ground Acceleration (PGA)
 //by taking the square root of the sum of the squares of the X, Y, and Z values.
-double findPeakGroundAcceleration(int *xyz){
+double findPeakGroundAcceleration(int *xyz) {
     double PGA;
 
     // Convert from mg to m/s^2
@@ -86,4 +85,19 @@ double findPeakGroundAcceleration(int *xyz){
     PGA = sqrt((x*x) + (y*y) + (z*z));
 
     return PGA;
+}
+
+// Return a Long of  Current Time
+long getCurrTime() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+}
+
+// Read Acceleration from ADXL345 
+void readAcceleration(){
+    ADXL345_XYZ_Read(XYZ);
+    xyz[0] = XYZ[0]*mg_per_lsb;
+    xyz[1] = XYZ[1]*mg_per_lsb;
+    xyz[2] = XYZ[2]*mg_per_lsb;
 }
