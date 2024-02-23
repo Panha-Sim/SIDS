@@ -1,4 +1,5 @@
 #include "ADXL345.h"
+#include "address_map_arm.h"
 #include <math.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -8,37 +9,43 @@
 
 #define DURATION 1000
 
+// =============== Initialize Value =================
 int fd;						// Memory Map I/O Driver
+void *LW_virtual;
 volatile int *I2C0_ptr;    	// virtual address pointer to I2C0	
 volatile int *SYSMGR_ptr;   // virtual address pointer to SYSMGR	
 int16_t XYZ[3];
-int xyz[3];
 int16_t mg_per_lsb = 4;
+// ============= End Initialize Value ================
 
+// ============= Initialize peripheral ===============
+int xyz[3];
+uint8_t devid;
+volatile unsigned int *JP1_ptr;
+// ============= End Initialize peripheral ===========
 
+// =============== Initialize Function ===============
+void initHardward();
 double findPeakGroundAcceleration(int *xyz);
 void openPhysical();
 long getCurrTime();
+// ============= End Initialize Function =============
 
 int main(void){
 
-    uint8_t devid;
-	
-	// Open Memory Map I/O driver and map virtual address for I2C0 and SYSMGR
-    openPhysical();
-	
-    // Configure I2C0 pins and enable I2C0 
-    Pinmux_Config();
-    I2C0_Init();
-    ADXL345_REG_READ(0x00, &devid);
-    
+    // Init All the Hardware
+    initHardward();
+
+    // Mapped JP1
+    JP1_ptr = (unsigned int*)(LW_virtual + JP1_BASE);
+    *(JP1_ptr + 1) = 0x0000000F;
+
     // Correct Device ID
     if (devid == 0xE5)
     {
         // Initialize accelerometer chip
         ADXL345_Init();
 
-        // 
         long previousTime = getCurrTime();
         while(1)
         {
@@ -61,11 +68,31 @@ int main(void){
     return 0;
 }
 
+void initHardward(){
+
+    // Open Memory Map I/O driver and map virtual address for I2C0 and SYSMGR
+    openPhysical();
+	
+    // Configure I2C0 pins and enable I2C0 
+    Pinmux_Config();
+    I2C0_Init();
+    ADXL345_REG_READ(0x00, &devid);
+}
+
 void openPhysical(){
     if( (fd = open( "/dev/mem", (O_RDWR | O_SYNC))) == -1) {
 		printf( "ERROR: could not open \"/dev/mem\"...\n" );
 		return( 1 );
 	}
+
+    LW_virtual = mmap (NULL,  LW_BRIDGE_SPAN, (PROT_READ | PROT_WRITE), MAP_SHARED, fd, LW_BRIDGE_BASE);
+    if (LW_virtual == MAP_FAILED)
+    {
+        printf ("ERROR: mmap() failed...\n");
+        close (fd);
+        return (NULL);
+    }
+
     I2C0_ptr = (volatile unsigned int *)mmap(NULL, 0x00000100, (PROT_READ | PROT_WRITE), MAP_SHARED, fd, 0xFFC04000);
 	SYSMGR_ptr = (volatile unsigned int *)mmap(NULL, 0x00000800, (PROT_READ | PROT_WRITE), MAP_SHARED, fd, 0xFFD08000);
 }
