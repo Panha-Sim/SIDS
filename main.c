@@ -9,55 +9,57 @@
 
 #define DURATION 1000
 
-// =============== Initialize Value =================
+// =============== INITIALIZE VALUE =================
 int fd;						                        //
 void *LW_virtual;                                   //
 volatile int *I2C0_ptr;    	                        //
 volatile int *SYSMGR_ptr;                           //
 int16_t XYZ[3];                                     //
 int16_t mg_per_lsb = 4;                             //
-// ============= End Initialize Value ================
+// ============= END INITIALIZE VALUE ================
 
-// ============= Initialize peripheral ===============
+// ============= INITIALIZE PERIPHERAL ===============
 int xyz[3];                                         //
 uint8_t devid;                                      //    
 volatile unsigned int *JP1_ptr;                     //    
 volatile unsigned int *KEY_ptr;                     //
-// ============= End Initialize peripheral ===========
+// ============= END INITIALIZE PERIPHERAL ===========
 
-// =============== Initialize Function ===============
+// =============== INITIALIZE FUNCTION ===============
 void initHardward();                                //  
 double findPeakGroundAcceleration(int *xyz);        //
 void openPhysical();                                //
 long getCurrTime();                                 //
-// ============= End Initialize Function =============
+// ============= END INITIALIZE FUNCTION =============
 
 int main(void){
 
     // Init All the Hardware
     initHardward();
 
-    // Map peripheral
-    JP1_ptr = (unsigned int*)(LW_virtual + JP1_BASE);
-    *(JP1_ptr + 1) = 0x0000000F;
-    KEY_ptr = (unsigned int*)(LW_virtual + KEY_BASE);
-    
-    int buttonValue = *KEY_ptr;
-    int prevoiusButton = *KEY_ptr;
-    bool measure = false;
+    // ================= MAP PERIPHERAL ================= 
+    JP1_ptr = (unsigned int*)(LW_virtual + JP1_BASE);   //
+    *(JP1_ptr + 1) = 0x0000000F;                        //
+    KEY_ptr = (unsigned int*)(LW_virtual + KEY_BASE);   //
+    int buttonValue = *KEY_ptr;                         //
+    int prevoiusButton = *KEY_ptr;                      //
+    bool measure = false;                               //
+    // ================= END PERIPHERAL ================= 
 
-
-    // Correct Device ID
     if (devid == 0xE5)
     {
         // Initialize accelerometer chip
         ADXL345_Init();
 
         long previousTime = getCurrTime();
+
+        // MAIN LOOP
+        // Keep running while the third button is not pressed
         while(buttonValue != 4)
         {
             buttonValue = *KEY_ptr;
-            // If button value change, change measure status and reset previousTime
+
+            // ==== If button value change ====
             if(prevoiusButton != buttonValue){
                 if(buttonValue == 2) {
                     measure = false;
@@ -67,6 +69,7 @@ int main(void){
                 }
                 prevoiusButton = buttonValue;
             }
+            // === End If button value change ===
 
             // If measure is true and 2 second have pass
             if(measure && (getCurrTime() - previousTime > DURATION)){
@@ -74,7 +77,7 @@ int main(void){
                 readAcceleration();
                 double pga = findPeakGroundAcceleration(&xyz[0]);
 
-                // Output to Hex
+                // Output to Hex and LEDR
                 printf("PGA=%f m/s^2\n", pga);
                 *JP1_ptr = pga;
                 
@@ -89,7 +92,7 @@ int main(void){
         printf("Incorrect device ID\n");
     }
 	
-	// Clean up and return OK
+	// Clean up
     close(fd);
     return 0;
 }
@@ -98,14 +101,14 @@ void initHardward(){
 
     // Open Memory Map I/O driver and map virtual address for I2C0 and SYSMGR
     openPhysical();
-	
-    // Configure I2C0 pins and enable I2C0 
     Pinmux_Config();
     I2C0_Init();
     ADXL345_REG_READ(0x00, &devid);
 }
 
+// Open Physical, map LW_virtual, I2C0_ptr, and SYSMGR_ptr to physical memory.
 void openPhysical(){
+
     if( (fd = open( "/dev/mem", (O_RDWR | O_SYNC))) == -1) {
 		printf( "ERROR: could not open \"/dev/mem\"...\n" );
 		return( 1 );
