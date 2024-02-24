@@ -10,25 +10,26 @@
 #define DURATION 1000
 
 // =============== Initialize Value =================
-int fd;						// Memory Map I/O Driver
-void *LW_virtual;
-volatile int *I2C0_ptr;    	// virtual address pointer to I2C0	
-volatile int *SYSMGR_ptr;   // virtual address pointer to SYSMGR	
-int16_t XYZ[3];
-int16_t mg_per_lsb = 4;
+int fd;						                        //
+void *LW_virtual;                                   //
+volatile int *I2C0_ptr;    	                        //
+volatile int *SYSMGR_ptr;                           //
+int16_t XYZ[3];                                     //
+int16_t mg_per_lsb = 4;                             //
 // ============= End Initialize Value ================
 
 // ============= Initialize peripheral ===============
-int xyz[3];
-uint8_t devid;
-volatile unsigned int *JP1_ptr;
+int xyz[3];                                         //
+uint8_t devid;                                      //    
+volatile unsigned int *JP1_ptr;                     //    
+volatile unsigned int *KEY_ptr;                     //
 // ============= End Initialize peripheral ===========
 
 // =============== Initialize Function ===============
-void initHardward();
-double findPeakGroundAcceleration(int *xyz);
-void openPhysical();
-long getCurrTime();
+void initHardward();                                //  
+double findPeakGroundAcceleration(int *xyz);        //
+void openPhysical();                                //
+long getCurrTime();                                 //
 // ============= End Initialize Function =============
 
 int main(void){
@@ -36,9 +37,15 @@ int main(void){
     // Init All the Hardware
     initHardward();
 
-    // Mapped JP1
+    // Map peripheral
     JP1_ptr = (unsigned int*)(LW_virtual + JP1_BASE);
     *(JP1_ptr + 1) = 0x0000000F;
+    KEY_ptr = (unsigned int*)(LW_virtual + KEY_BASE);
+    
+    int buttonValue = *KEY_ptr;
+    int prevoiusButton = *KEY_ptr;
+    bool measure = false;
+
 
     // Correct Device ID
     if (devid == 0xE5)
@@ -47,14 +54,33 @@ int main(void){
         ADXL345_Init();
 
         long previousTime = getCurrTime();
-        while(1)
+        while(buttonValue != 4)
         {
-            // Wait 2 second before displaying
-            if(getCurrTime() - previousTime > DURATION) 
-            {
+            buttonValue = *KEY_ptr;
+            // If button value change, change measure status and reset previousTime
+            if(prevoiusButton != buttonValue){
+                if(buttonValue == 2) {
+                    measure = false;
+                }
+                if(buttonValue == 1) {
+                    measure = true;
+                }
+                prevoiusButton = buttonValue;
+            }
+
+            // If measure is true and 2 second have pass
+            if(measure && (getCurrTime() - previousTime > DURATION)){
+                
                 readAcceleration();
-                printf("PGA=%f m/s^2\n", findPeakGroundAcceleration(&xyz[0]));
+                double pga = findPeakGroundAcceleration(&xyz[0]);
+
+                // Output to Hex
+                printf("PGA=%f m/s^2\n", pga);
+                *JP1_ptr = pga;
+                
+                // Reset previousTime
                 previousTime = getCurrTime();
+                
             }
         }
     } 
